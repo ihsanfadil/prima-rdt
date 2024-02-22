@@ -191,7 +191,7 @@ ggsave(plot = dens_histogram_log,
 (dens_beeswarm <- prima_pf |> 
   ggplot(aes(x = mrdt, y = log10_par_dens)) +
   geom_beeswarm(aes(group = mrdt), alpha = 0.2, size = 1.5, cex = 1.8) +
-  geom_boxplot(alpha = 0, width = 0.5/2) +
+  geom_boxplot(alpha = 0, varwidth = TRUE) +
   # geom_point(data = means, shape = 18, size = 3, colour = '#D60B00',
   #            aes(x = mrdt, y = mean_log10)) +
   scale_y_continuous(limits = c(0.9, 6.5),
@@ -265,12 +265,10 @@ lrm_rcs <- lrm(double_band ~ rcs(log10_par_dens, 3), data = prima_pf)
           axis.title.x = element_text(hjust = 1),   
           axis.title.y = element_text(hjust = 0.5),
           panel.grid = element_blank()) +
-    scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
-                       breaks = seq(0, 6),
-                       expand = c(0, 0)) +
+    scale_x_continuous(expand = c(0, 0)) +
     scale_y_continuous(breaks = seq(-4, 12, by = 4)) +
     labs(y = 'Log-odds\n',
-         x = '\nParasite density (per \U00B5L)',
+         x = '\nLog10-parasite density',
          title = ''))
 
 ggsave(plot = linearity_plot,
