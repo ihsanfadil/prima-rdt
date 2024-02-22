@@ -15,6 +15,7 @@ library(scales)
 library(ggExtra)
 library(ggeffects)
 library(cowplot)
+library(rms)
 library(xtable); library(knitr)
 library(extrafont); loadfonts()
 
@@ -241,8 +242,35 @@ ggsave(plot = marginal_plot,
        height = 5.5, width = 7.5,
        dpi = 1200)
 
+# Linearity check
+ddist <- datadist(prima_pf)
+options(datadist = 'ddist')
 
+lrm_linear <- lrm(double_band ~ log10_par_dens, data = prima_pf)
+lrm_rcs <- lrm(double_band ~ rcs(log10_par_dens, 3), data = prima_pf)
 
+## Approximately linear
+(linearity_plot <- Predict(lrm_rcs, name = 'log10_par_dens') |>
+  ggplot() +
+    theme_bw() +
+    theme(axis.ticks = element_blank(),
+          plot.margin = margin(10, 50, 10, 50),
+          text = element_text(size = 9.5, family = "Fira Code"),
+          axis.title.x = element_text(hjust = 1),   
+          axis.title.y = element_text(hjust = 0.5),
+          panel.grid = element_blank()) +
+    scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
+                       breaks = seq(0, 6),
+                       expand = c(0, 0)) +
+    scale_y_continuous(breaks = seq(-2, 12, by = 2)) +
+    labs(y = 'Log-odds\n',
+         x = '\nParasite density (per \U00B5L)',
+         title = ''))
+
+ggsave(plot = linearity_plot,
+       filename = "linearity_plot.png",
+       height = 5.5, width = 7.5,
+       dpi = 1200)
 
 
 
