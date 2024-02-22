@@ -14,6 +14,7 @@ library(broom)
 library(scales)
 library(ggExtra)
 library(ggeffects)
+library(cowplot)
 library(xtable); library(knitr)
 library(extrafont); loadfonts()
 
@@ -103,8 +104,7 @@ prima_pf <- prima |>
   
   # Outcome for regression
   mutate(double_band = if_else(mrdt == 'Pf/Pan (HRP-2/pLDH)', 1L, 0L) |>
-           factor()) |> 
-  drop_na(par_dens) |> # Exclude missing data on parasite count
+           factor()) |>
   filter(spc != 'Negative') # Exclude false-positive MRDT
 
 # Descriptives ------------------------------------------------------------
@@ -116,27 +116,24 @@ prima_pf <- prima |>
              median_ori = median(par_dens),
              mean_ori = mean(par_dens)))
 
-(dens_histogram_ori <- prima_pf |> 
+dens_histogram_ori <- prima_pf |> 
   ggplot(aes(x = par_dens / 1000)) +
   geom_histogram(aes(fill = mrdt),
                  alpha = 0.8, bins = 14, position = 'identity') +
   scale_x_continuous(labels = scales::comma,
-                     breaks = seq(0, 1500, by = 500)) +
+                     breaks = seq(0, 2000, by = 500)) +
   scale_y_continuous(expand = c(0, 0, 0, 5),
-                     breaks = seq(0, 120, by = 20)) +
+                     breaks = seq(0, 120, by = 20),
+                     limits = c(0, 121)) +
   scale_fill_manual(values = c('gray30', 'gray75')) +
-  theme(legend.position = c(0.8, 0.25),
+  theme(legend.position = 'none',
         panel.grid = element_blank(),
-        axis.ticks = element_blank()) +
-  labs(x = '\nParasite density (in thousand per \U00B5L)',
-       y = 'Number of patients\n'))
+        axis.ticks = element_blank(),
+        text = element_text(size = 5.5, family = "Fira Code")) +
+  labs(x = '',
+       y = '')
 
-ggsave(plot = dens_histogram_ori,
-       filename = "dens_histogram_ori.png",
-       height = 5, width = 5.5,
-       dpi = 1200)
-
-(dens_histogram_ori2 <- prima_pf |> 
+dens_histogram_ori2 <- prima_pf |> 
     filter(par_dens < 1e6) |> 
     ggplot(aes(x = par_dens / 1000)) +
     geom_histogram(aes(fill = mrdt),
@@ -144,31 +141,37 @@ ggsave(plot = dens_histogram_ori,
     scale_x_continuous(labels = scales::comma,
                        breaks = seq(0, 500, by = 50)) +
     scale_y_continuous(expand = c(0, 0, 0, 5),
-                       breaks = seq(0, 50, by = 10)) +
+                       breaks = seq(0, 50, by = 10),
+                       limits = c(0, 51)) +
     scale_fill_manual(values = c('gray30', 'gray75')) +
-    theme(legend.position = c(0.8, 0.25),
+    theme(legend.position = c(0.8, 0.2),
           panel.grid = element_blank(),
           axis.ticks = element_blank()) +
     labs(x = '\nParasite density (in thousand per \U00B5L)',
-         y = 'Number of patients\n'))
+         y = 'Number of patients\n')
 
-ggsave(plot = dens_histogram_ori2,
-       filename = "dens_histogram_ori2.png",
+combined_histogram <- ggdraw() + draw_plot(dens_histogram_ori2)
+(combined_histogram <- combined_histogram +
+  draw_plot(dens_histogram_ori, x = 0.45, y = 0.45, width = 0.5, height = 0.5))
+
+ggsave(plot = combined_histogram,
+       filename = "combined_histogram.png",
        height = 5, width = 5.5,
        dpi = 1200)
 
 (dens_histogram_log <- prima_pf |> 
-    ggplot(aes(x = log10_par_dens - log10(1000))) +
+    ggplot(aes(x = log10_par_dens)) +
     geom_histogram(aes(fill = mrdt),
-                   alpha = 0.8, bins = 14, position = 'identity') +
-    scale_x_continuous(labels = 10^(seq(-1, 3)), breaks = seq(-1, 3)) +
+                   alpha = 0.8, bins = 16, position = 'identity') +
+    scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
+                       breaks = seq(1, 6)) +
     scale_y_continuous(expand = c(0, 0, 0, 5),
                        breaks = seq(0, 50, by = 5)) +
     scale_fill_manual(values = c('gray30', 'gray75')) +
-    theme(legend.position = c(0.2, 0.8),
+    theme(legend.position = c(0.2, 0.5),
           panel.grid = element_blank(),
           axis.ticks = element_blank()) +
-    labs(x = '\nParasite density (in thousand per \U00B5L)',
+    labs(x = '\nParasite density (per \U00B5L)',
          y = 'Number of patients\n')
     # + facet_wrap(~bcell_counted)
     )
@@ -179,20 +182,21 @@ ggsave(plot = dens_histogram_log,
        dpi = 1200)
 
 (dens_beeswarm <- prima_pf |> 
-  ggplot(aes(x = mrdt, y = log10_par_dens - log10(1000))) +
+  ggplot(aes(x = mrdt, y = log10_par_dens)) +
   geom_beeswarm(aes(group = mrdt), alpha = 0.2, size = 1.5, cex = 1.8) +
   geom_boxplot(alpha = 0, width = 0.5/2) +
   # geom_point(data = means, shape = 18, size = 3, colour = '#D60B00',
-  #            aes(x = mrdt, y = mean_log10 - log10(1000))) +
-  scale_y_continuous(limits = c(-1.5, 3.5),
-                     labels = 10^(seq(-1, 3)), breaks = seq(-1, 3)) +
+  #            aes(x = mrdt, y = mean_log10)) +
+  scale_y_continuous(limits = c(0.9, 6.5),
+                     labels = function(x) parse(text = sprintf("10^%d", x)),
+                     breaks = seq(1, 6)) +
   # scale_colour_manual(values = c('gray60', 'gray30')) +
   theme(legend.position = 'none',
         panel.grid = element_blank(),
         axis.ticks = element_blank(),
         plot.margin = margin(10, 50, 10, 50)) +
   labs(x = '\nMalaria RDT positive for Plasmodium falciparum',
-       y = 'Parasite density (in thousand per \U00B5L)\n'))
+       y = 'Parasite density (per \U00B5L)\n'))
 
 ggsave(plot = dens_beeswarm,
        filename = "dens_beeswarm.png",
@@ -208,7 +212,7 @@ linear_model <- lm(formula = log10_par_dens ~ double_band + bcell_counted,
 ggpredict(linear_model, terms = c("double_band",
                                   "bcell_counted")) |> plot()
 
-logit_model <- glm(formula = double_band ~ log10_par_dens + bcell_counted,
+logit_model <- glm(formula = double_band ~ log10_par_dens,
                    family = "binomial", data = prima_pf)
 (out_logit <- tidy(logit_model, conf.int = TRUE, exponentiate = TRUE))
 
@@ -216,7 +220,7 @@ logit_model <- glm(formula = double_band ~ log10_par_dens + bcell_counted,
                            terms = c("log10_par_dens [0:6, by = 0.01]")) |>
   plot() +
   theme_bw() +
-  scale_x_continuous(labels = function(x) comma(10^x),
+  scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
                      breaks = seq(0, 6),
                      expand = c(0, 0)) +
   scale_y_continuous(expand = c(0.025, 0),
@@ -236,8 +240,6 @@ ggsave(plot = marginal_plot,
        filename = "marginal_plot.png",
        height = 5.5, width = 7.5,
        dpi = 1200)
-
-
 
 
 
