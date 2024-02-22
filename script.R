@@ -39,13 +39,12 @@ theme_update(
 
 # Import data -------------------------------------------------------------
 
-prima_raw <- rio::import('ACROSS For RDT_20240127_MC.xlsx')
+prima_raw <- rio::import('ACROSS For RDT_20240222_revised.xlsx')
 
 # Clean data --------------------------------------------------------------
 
-# All data (n = 317)
+# All data (n = 330)
 prima <- prima_raw |> 
-  select(CODE, AGE, SEX, WEIGHT, TEMP, MRDT, SPC, PER, EXPER, APC, MD) |>
   janitor::clean_names() |> 
   arrange(code) |> 
   mutate(mrdt = case_when(mrdt == 0 ~ 'Negative',
@@ -69,6 +68,10 @@ prima <- prima_raw |>
                          is.na(spc) ~ NA_character_,
                          TRUE ~ 'Check me!') |> factor(),
          sex = if_else(sex == 1, 'Male', 'Female') |> factor(),
+         film = case_when(film == 1 ~ 'Thick',
+                          film == 2 ~ 'Thin',
+                          is.na(film) ~ NA_character_,
+                          TRUE ~ 'Check me!') |> factor(),
          bcell_counted = case_when(per == 1 ~ 'RBC',
                                    per %in% c(2, 3, 4) ~ 'WBC',
                                    is.na(per) ~ NA_character_,
@@ -80,7 +83,7 @@ prima <- prima_raw |>
            is.na(bcell_counted) ~ NA_real_,
            TRUE ~ 9999999),
          bcell_denom = case_when(
-           bcell_counted == 'RBC' & per == 1 ~ 5000,
+           bcell_counted == 'RBC' & per == 1 ~ thin_denom,
            bcell_counted == 'WBC' & per == 2 ~ 200,
            bcell_counted == 'WBC' & per == 3 ~ 500,
            bcell_counted == 'WBC' & per == 4 ~ exper,
@@ -90,11 +93,13 @@ prima <- prima_raw |>
          log10_par_dens = if_else(par_dens == 0, 0, log10(par_dens))
          ) 
 
-# Check
-select(.data = prima,
-       apc, per, exper,
-       bcell_counted, bcell_mult, bcell_denom,
-       par_dens, md) |> view()
+rio::export(prima, "prima_clean.xlsx")
+
+# # Check
+# select(.data = prima,
+#        apc, per, exper,
+#        bcell_counted, bcell_mult, bcell_denom,
+#        par_dens, md) |> view()
          
 # Pf-only data
 prima_pf <- prima |> 
@@ -107,6 +112,8 @@ prima_pf <- prima |>
   mutate(double_band = if_else(mrdt == 'Pf/Pan (HRP-2/pLDH)', 1L, 0L) |>
            factor()) |>
   filter(spc != 'Negative') # Exclude false-positive MRDT
+
+rio::export(prima_pf, "prima_pf.xlsx")
 
 # Descriptives ------------------------------------------------------------
 
@@ -135,15 +142,14 @@ dens_histogram_ori <- prima_pf |>
        y = '')
 
 dens_histogram_ori2 <- prima_pf |> 
-    filter(par_dens < 1e6) |> 
+    filter(par_dens < 0.5e6) |> 
     ggplot(aes(x = par_dens / 1000)) +
     geom_histogram(aes(fill = mrdt),
-                   alpha = 0.8, bins = 14, position = 'identity') +
+                   alpha = 0.8, bins = 15, position = 'identity') +
     scale_x_continuous(labels = scales::comma,
                        breaks = seq(0, 500, by = 50)) +
     scale_y_continuous(expand = c(0, 0, 0, 5),
-                       breaks = seq(0, 50, by = 10),
-                       limits = c(0, 51)) +
+                       breaks = seq(0, 50, by = 10)) +
     scale_fill_manual(values = c('gray30', 'gray75')) +
     theme(legend.position = c(0.8, 0.2),
           panel.grid = element_blank(),
@@ -163,7 +169,7 @@ ggsave(plot = combined_histogram,
 (dens_histogram_log <- prima_pf |> 
     ggplot(aes(x = log10_par_dens)) +
     geom_histogram(aes(fill = mrdt),
-                   alpha = 0.8, bins = 16, position = 'identity') +
+                   alpha = 0.8, bins = 17, position = 'identity') +
     scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
                        breaks = seq(1, 6)) +
     scale_y_continuous(expand = c(0, 0, 0, 5),
@@ -206,12 +212,11 @@ ggsave(plot = dens_beeswarm,
 
 # Modelling ---------------------------------------------------------------
 
-linear_model <- lm(formula = log10_par_dens ~ double_band + bcell_counted,
+linear_model <- lm(formula = log10_par_dens ~ double_band + film,
                    data = prima_pf)
 (out_linear <- tidy(linear_model, conf.int = TRUE))
 10^out_linear[2, 2] # Interpretation: higher/lower by a factor of ...
-ggpredict(linear_model, terms = c("double_band",
-                                  "bcell_counted")) |> plot()
+ggpredict(linear_model, terms = c("double_band", "film")) |> plot()
 
 logit_model <- glm(formula = double_band ~ log10_par_dens,
                    family = "binomial", data = prima_pf)
@@ -243,7 +248,8 @@ ggsave(plot = marginal_plot,
        dpi = 1200)
 
 # Linearity check
-ddist <- datadist(prima_pf)
+prima_check <- select(prima_pf, c(log10_par_dens, film, double_band))
+ddist <- datadist(prima_check)
 options(datadist = 'ddist')
 
 lrm_linear <- lrm(double_band ~ log10_par_dens, data = prima_pf)
@@ -262,7 +268,7 @@ lrm_rcs <- lrm(double_band ~ rcs(log10_par_dens, 3), data = prima_pf)
     scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
                        breaks = seq(0, 6),
                        expand = c(0, 0)) +
-    scale_y_continuous(breaks = seq(-2, 12, by = 2)) +
+    scale_y_continuous(breaks = seq(-4, 12, by = 4)) +
     labs(y = 'Log-odds\n',
          x = '\nParasite density (per \U00B5L)',
          title = ''))
