@@ -238,7 +238,7 @@ logit_model <- glm(formula = double_band ~ log10_par_dens,
         text = element_text(size = 9.5, family = "Fira Code"),
         axis.title.x = element_text(hjust = 1),   
         axis.title.y = element_text(hjust = 0.5)) +
-  labs(y = 'Estimated probability\n',
+  labs(y = 'Estimated probability\nof double-band positivity\n',
        x = '\nParasite density (per \U00B5L)',
        title = ''))
 
@@ -265,9 +265,9 @@ lrm_rcs <- lrm(double_band ~ rcs(log10_par_dens, 3), data = prima_pf)
           axis.title.x = element_text(hjust = 1),   
           axis.title.y = element_text(hjust = 0.5),
           panel.grid = element_blank()) +
-    scale_x_continuous(expand = c(0, 0)) +
-    scale_y_continuous(breaks = seq(-4, 12, by = 4)) +
-    labs(y = 'Log-odds\n',
+    scale_x_continuous(expand = c(0, 0), breaks = seq(2.5, 4.5, by = 0.5)) +
+    scale_y_continuous(breaks = seq(-4, 12, by = 2)) +
+    labs(y = 'Log-odds of double-band positivity\n',
          x = '\nLog10-parasite density',
          title = ''))
 
