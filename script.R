@@ -111,8 +111,8 @@ prima_pf <- prima |>
   # Outcome for regression
   mutate(double_band = if_else(mrdt == 'Pf/Pan (HRP-2/pLDH)', 1L, 0L) |>
            factor()) |>
-  filter(spc != 'Negative') # Exclude false-positive MRDT
-
+  filter(spc != 'Negative', spc != 'Pm', spc != 'Pv') # Exclude false-positive MRDT
+                                                      # Exclude Pm, Pv mono
 rio::export(prima_pf, "prima_pf.xlsx")
 
 # Descriptives ------------------------------------------------------------
@@ -222,23 +222,55 @@ logit_model <- glm(formula = double_band ~ log10_par_dens,
                    family = "binomial", data = prima_pf)
 (out_logit <- tidy(logit_model, conf.int = TRUE, exponentiate = TRUE))
 
+# Binned averages
+# n_breaks <- 7
+# breaks <- quantile(prima_pf$log10_par_dens,
+#                    probs = seq(0, 1, length.out = n_breaks))
+binned_avg <- prima_pf |> 
+  mutate(dens_bin = case_when(log10_par_dens < 2 ~ 1,
+                              log10_par_dens < 3 ~ 2,
+                              log10_par_dens < 4 ~ 3,
+                              log10_par_dens < 5 ~ 4,
+                              log10_par_dens < 6 ~ 5),
+         double_band = as.numeric(double_band) - 1) |> 
+  select(log10_par_dens, dens_bin, double_band)
+
+(avg_bin_dens <- binned_avg |> 
+  group_by(dens_bin) |> 
+  summarise(avg_dens = mean(log10_par_dens),
+            avg_band = mean(double_band),
+            n = n()) |> 
+  mutate(lwr = avg_band - qnorm(0.975) * sqrt(avg_band * (1 - avg_band) / n),
+         upr = avg_band + qnorm(0.975) * sqrt(avg_band * (1 - avg_band) / n),
+         lwr = if_else(lwr < 0, 0, lwr),
+         upr = if_else(upr > 1, 1, upr)))
+
+# Marginal plot
 (marginal_plot <- ggpredict(logit_model,
-                           terms = c("log10_par_dens [0:6, by = 0.01]")) |>
+                            terms = c("log10_par_dens [0:6.2, by = 0.01]")) |>
   plot() +
   theme_bw() +
   scale_x_continuous(labels = function(x) parse(text = sprintf("10^%d", x)),
                      breaks = seq(0, 6),
-                     expand = c(0, 0)) +
+                     expand = c(0, 0),
+                     limit = c(0.85, 6.15)) +
   scale_y_continuous(expand = c(0.025, 0),
                      breaks = seq(0, 1, by = 0.2),
                      labels = label_number(scale = 100, suffix = '%')) +
+  geom_pointrange(aes(x = avg_dens, y = avg_band, ymin = lwr, ymax = upr),
+                  data = avg_bin_dens,
+                  shape = 18, size = 0.8,
+                  colour = '#af2413', linetype = 'dotted') +
+  geom_jitter(aes(x = log10_par_dens, y = as.numeric(double_band) - 1),
+              data = prima_pf,
+              width = 0.01, height = 0.01, alpha = 0.2, size = 1.2) +
   theme(panel.grid.minor = element_blank(),
         axis.ticks = element_blank(),
         plot.margin = margin(10, 50, 10, 50),
         text = element_text(size = 9.5, family = "Fira Code"),
         axis.title.x = element_text(hjust = 1),   
         axis.title.y = element_text(hjust = 0.5)) +
-  labs(y = 'Estimated probability\nof double-band positivity\n',
+  labs(y = 'Estimated probability of double-band positivity\n',
        x = '\nParasite density (per \U00B5L)',
        title = ''))
 
